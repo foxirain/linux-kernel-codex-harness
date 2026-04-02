@@ -1,0 +1,52 @@
+{
+  "include_dirs": [
+    "kernel/bpf",
+    "net/core",
+    "include/linux"
+  ],
+  "max_signals_per_file": 16,
+  "patterns": [
+    {
+      "name": "bpf_surface",
+      "pattern": "\\b(?:bpf_|BPF_PROG|bpf_map|bpf_prog|btf_)\\w*",
+      "weight": 12,
+      "rationale": "BPF verifier and helper paths are consistently high-value CVE ground."
+    },
+    {
+      "name": "user_pointer",
+      "pattern": "\\b__user\\b",
+      "weight": 6,
+      "rationale": "BPF syscall argument import is an immediate trust boundary."
+    },
+    {
+      "name": "copy_from_user",
+      "pattern": "\\bcopy_from_user\\b|\\b__copy_from_user\\b|\\bget_user\\b",
+      "weight": 9,
+      "rationale": "verifier input and map metadata imports are exploitable hotspots."
+    },
+    {
+      "name": "refcount",
+      "pattern": "\\b(?:refcount_|atomic_(?:inc|dec|add|sub)|kref_)\\w*",
+      "weight": 8,
+      "rationale": "program and map lifetimes are subtle and security-critical."
+    },
+    {
+      "name": "type_or_bounds",
+      "pattern": "\\b(?:tnum|bounds|spec_v1|alu_limit|btf_check)\\w*",
+      "weight": 8,
+      "rationale": "verifier bounds and type logic are direct bug sources."
+    },
+    {
+      "name": "allocator",
+      "pattern": "\\b(?:kz?alloc|kvz?alloc|vmalloc|kmem_cache_alloc)\\b",
+      "weight": 5,
+      "rationale": "map and program allocation sizes deserve scrutiny."
+    },
+    {
+      "name": "free_path",
+      "pattern": "\\b(?:kfree|kvfree|kmem_cache_free|bpf_prog_put|bpf_map_put)\\b",
+      "weight": 6,
+      "rationale": "put/free pairing can reveal UAF and refcount errors."
+    }
+  ]
+}

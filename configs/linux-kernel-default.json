@@ -1,0 +1,93 @@
+{
+  "include_dirs": [
+    "kernel",
+    "mm",
+    "net",
+    "fs",
+    "security",
+    "io_uring",
+    "lib",
+    "drivers"
+  ],
+  "max_signals_per_file": 12,
+  "patterns": [
+    {
+      "name": "ioctl_surface",
+      "pattern": "\\b(?:unlocked_)?ioctl\\b|\\bcompat_ioctl\\b",
+      "weight": 10,
+      "rationale": "ioctl handlers often expose complex user-controlled state transitions."
+    },
+    {
+      "name": "copy_from_user",
+      "pattern": "\\bcopy_from_user\\b|\\b__copy_from_user\\b|\\bget_user\\b",
+      "weight": 9,
+      "rationale": "user-to-kernel data movement is a frequent memory corruption entrypoint."
+    },
+    {
+      "name": "copy_to_user",
+      "pattern": "\\bcopy_to_user\\b|\\b__copy_to_user\\b|\\bput_user\\b",
+      "weight": 6,
+      "rationale": "kernel-to-user transfers are a strong info-leak signal."
+    },
+    {
+      "name": "user_pointer",
+      "pattern": "\\b__user\\b",
+      "weight": 6,
+      "rationale": "explicit user pointer handling usually marks trust boundaries."
+    },
+    {
+      "name": "allocator",
+      "pattern": "\\b(?:kz?alloc|kvz?alloc|vmalloc|kmem_cache_alloc)\\b",
+      "weight": 5,
+      "rationale": "allocation around user input often couples to lifetime and bounds bugs."
+    },
+    {
+      "name": "free_path",
+      "pattern": "\\b(?:kfree|kvfree|kmem_cache_free)\\b",
+      "weight": 5,
+      "rationale": "free paths near user-triggerable flows increase UAF and double-free risk."
+    },
+    {
+      "name": "refcount",
+      "pattern": "\\b(?:refcount_|atomic_(?:inc|dec|add|sub)|kref_)\\w*",
+      "weight": 7,
+      "rationale": "reference counting mistakes are common kernel CVE material."
+    },
+    {
+      "name": "size_math",
+      "pattern": "\\b(?:size_t|u\\d+|unsigned)\\b.*(?:len|size|count)|\\b(?:array_size|struct_size|flex_array_size)\\b",
+      "weight": 6,
+      "rationale": "length arithmetic and struct sizing are strong overflow indicators."
+    },
+    {
+      "name": "memcpy_family",
+      "pattern": "\\b(?:memcpy|memmove|strscpy|strncpy|snprintf)\\b",
+      "weight": 4,
+      "rationale": "buffer movement around user-derived lengths can lead to overwrite or leak."
+    },
+    {
+      "name": "lockless_or_racy",
+      "pattern": "\\b(?:spin_lock|mutex_lock|rcu_read_lock|lockdep_assert_held)\\b",
+      "weight": 3,
+      "rationale": "locking primitives help surface race windows when paired with frees or refs."
+    },
+    {
+      "name": "bpf_surface",
+      "pattern": "\\b(?:BPF_PROG|bpf_|sk_buff|xdp)\\w*",
+      "weight": 8,
+      "rationale": "BPF and packet processing frequently expose rich attacker-controlled state."
+    },
+    {
+      "name": "capability_gate",
+      "pattern": "\\b(?:capable|ns_capable|security_)\\w*",
+      "weight": 4,
+      "rationale": "authorization checks nearby can indicate privilege-boundary mistakes."
+    },
+    {
+      "name": "warning_marker",
+      "pattern": "\\b(?:WARN_ON|BUG_ON|KASAN|UBSAN|__must_check)\\b",
+      "weight": 3,
+      "rationale": "existing invariant checks often cluster around historically fragile code."
+    }
+  ]
+}

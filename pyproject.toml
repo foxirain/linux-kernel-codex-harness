@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kernel-codex-harness"
+version = "0.1.0"
+description = "Kernel-focused vulnerability hunting harness for Codex"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "OpenAI Codex" }
+]
+dependencies = []
+
+[project.scripts]
+kernel-harness = "kernel_harness.cli:main"
+
+[tool.setuptools]
+packages = ["kernel_harness"]

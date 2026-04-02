@@ -1,0 +1,50 @@
+{
+  "include_dirs": [
+    "drivers"
+  ],
+  "max_signals_per_file": 14,
+  "patterns": [
+    {
+      "name": "ioctl_surface",
+      "pattern": "\\b(?:unlocked_)?ioctl\\b|\\bcompat_ioctl\\b",
+      "weight": 10,
+      "rationale": "driver ioctls remain one of the best bug-hunting surfaces."
+    },
+    {
+      "name": "user_pointer",
+      "pattern": "\\b__user\\b",
+      "weight": 6,
+      "rationale": "drivers handling userspace pointers are direct trust boundaries."
+    },
+    {
+      "name": "copy_from_user",
+      "pattern": "\\bcopy_from_user\\b|\\b__copy_from_user\\b|\\bget_user\\b",
+      "weight": 9,
+      "rationale": "driver import paths often hide size and lifetime bugs."
+    },
+    {
+      "name": "copy_to_user",
+      "pattern": "\\bcopy_to_user\\b|\\b__copy_to_user\\b|\\bput_user\\b",
+      "weight": 6,
+      "rationale": "driver export paths are frequent info leak sites."
+    },
+    {
+      "name": "dma_or_mmio",
+      "pattern": "\\b(?:dma_|ioremap|readl|writel|pci_)\\w*",
+      "weight": 7,
+      "rationale": "DMA and MMIO handling often mix complex lifetimes with attacker control."
+    },
+    {
+      "name": "allocator",
+      "pattern": "\\b(?:kz?alloc|kvz?alloc|vmalloc|kmem_cache_alloc)\\b",
+      "weight": 5,
+      "rationale": "allocation around device control paths is a useful signal."
+    },
+    {
+      "name": "free_path",
+      "pattern": "\\b(?:kfree|kvfree|kmem_cache_free)\\b",
+      "weight": 5,
+      "rationale": "teardown logic in drivers often breaks under error paths."
+    }
+  ]
+}

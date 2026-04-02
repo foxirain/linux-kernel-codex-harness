@@ -1,0 +1,51 @@
+{
+  "include_dirs": [
+    "io_uring",
+    "fs"
+  ],
+  "max_signals_per_file": 16,
+  "patterns": [
+    {
+      "name": "io_uring_surface",
+      "pattern": "\\b(?:io_uring|io_submit_sqes|io_req_|io_queue_)\\w*",
+      "weight": 12,
+      "rationale": "io_uring paths combine attacker control with async lifetime complexity."
+    },
+    {
+      "name": "user_pointer",
+      "pattern": "\\b__user\\b",
+      "weight": 6,
+      "rationale": "userspace ring and buffer pointers are trust boundaries."
+    },
+    {
+      "name": "copy_from_user",
+      "pattern": "\\bcopy_from_user\\b|\\b__copy_from_user\\b|\\bget_user\\b",
+      "weight": 9,
+      "rationale": "ring setup and SQE import are high-risk usercopy zones."
+    },
+    {
+      "name": "copy_to_user",
+      "pattern": "\\bcopy_to_user\\b|\\b__copy_to_user\\b|\\bput_user\\b",
+      "weight": 6,
+      "rationale": "completion paths can leak partially initialized data."
+    },
+    {
+      "name": "refcount",
+      "pattern": "\\b(?:refcount_|atomic_(?:inc|dec|add|sub)|kref_)\\w*",
+      "weight": 8,
+      "rationale": "request and file lifetime mismatches are common here."
+    },
+    {
+      "name": "lockless_or_racy",
+      "pattern": "\\b(?:spin_lock|mutex_lock|rcu_read_lock|completion|work_struct)\\b",
+      "weight": 5,
+      "rationale": "async workers and lockless assumptions deserve scrutiny."
+    },
+    {
+      "name": "free_path",
+      "pattern": "\\b(?:kfree|kvfree|kmem_cache_free|io_put_)\\w*",
+      "weight": 6,
+      "rationale": "free paths define the critical UAF windows."
+    }
+  ]
+}

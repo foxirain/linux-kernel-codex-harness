@@ -1,0 +1,58 @@
+{
+  "include_dirs": [
+    "fs",
+    "mm",
+    "security"
+  ],
+  "max_signals_per_file": 14,
+  "patterns": [
+    {
+      "name": "ioctl_surface",
+      "pattern": "\\b(?:unlocked_)?ioctl\\b|\\bcompat_ioctl\\b",
+      "weight": 10,
+      "rationale": "filesystem ioctls are dense with attacker-controlled structures."
+    },
+    {
+      "name": "procfs_surface",
+      "pattern": "\\b(?:proc_create|proc_ops|seq_file|debugfs_create)\\w*",
+      "weight": 8,
+      "rationale": "procfs and debugfs often expose low-friction user entrypoints."
+    },
+    {
+      "name": "user_pointer",
+      "pattern": "\\b__user\\b",
+      "weight": 6,
+      "rationale": "explicit userspace pointers highlight trust boundaries."
+    },
+    {
+      "name": "copy_from_user",
+      "pattern": "\\bcopy_from_user\\b|\\b__copy_from_user\\b|\\bget_user\\b",
+      "weight": 9,
+      "rationale": "usercopy in FS handlers often precedes bounds mistakes."
+    },
+    {
+      "name": "copy_to_user",
+      "pattern": "\\bcopy_to_user\\b|\\b__copy_to_user\\b|\\bput_user\\b",
+      "weight": 6,
+      "rationale": "filesystem read paths can leak stale kernel data."
+    },
+    {
+      "name": "size_math",
+      "pattern": "\\b(?:size_t|u\\d+|unsigned)\\b.*(?:len|size|count)|\\b(?:array_size|struct_size|flex_array_size)\\b",
+      "weight": 6,
+      "rationale": "size calculations around file operations are overflow-prone."
+    },
+    {
+      "name": "allocator",
+      "pattern": "\\b(?:kz?alloc|kvz?alloc|vmalloc|kmem_cache_alloc)\\b",
+      "weight": 5,
+      "rationale": "allocation under user-controlled lengths increases exploitability."
+    },
+    {
+      "name": "free_path",
+      "pattern": "\\b(?:kfree|kvfree|kmem_cache_free)\\b",
+      "weight": 5,
+      "rationale": "error unwind and teardown sites are good UAF candidates."
+    }
+  ]
+}

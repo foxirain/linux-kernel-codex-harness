@@ -1,0 +1,58 @@
+{
+  "include_dirs": [
+    "net",
+    "drivers/net",
+    "kernel/bpf"
+  ],
+  "max_signals_per_file": 14,
+  "patterns": [
+    {
+      "name": "netlink_surface",
+      "pattern": "\\b(?:netlink|genl_|nla_parse|nla_put)\\w*",
+      "weight": 10,
+      "rationale": "netlink families expose rich user-controlled state and nested attributes."
+    },
+    {
+      "name": "socket_ops",
+      "pattern": "\\b(?:sockops|setsockopt|getsockopt|sendmsg|recvmsg)\\b",
+      "weight": 8,
+      "rationale": "socket operation handlers are classic syscall-adjacent attack surfaces."
+    },
+    {
+      "name": "copy_from_user",
+      "pattern": "\\bcopy_from_user\\b|\\b__copy_from_user\\b|\\bget_user\\b",
+      "weight": 9,
+      "rationale": "user-to-kernel copies are strong corruption signals."
+    },
+    {
+      "name": "copy_to_user",
+      "pattern": "\\bcopy_to_user\\b|\\b__copy_to_user\\b|\\bput_user\\b",
+      "weight": 6,
+      "rationale": "kernel-to-user copies often surface info leaks."
+    },
+    {
+      "name": "refcount",
+      "pattern": "\\b(?:refcount_|atomic_(?:inc|dec|add|sub)|kref_)\\w*",
+      "weight": 7,
+      "rationale": "socket and skb lifetimes often fail via refcount drift."
+    },
+    {
+      "name": "skb_or_xdp",
+      "pattern": "\\b(?:sk_buff|skb_|xdp|xfrm|nf_)\\w*",
+      "weight": 8,
+      "rationale": "packet metadata and XDP paths are historically bug-prone."
+    },
+    {
+      "name": "allocator",
+      "pattern": "\\b(?:kz?alloc|kvz?alloc|kmem_cache_alloc)\\b",
+      "weight": 5,
+      "rationale": "allocation under packet-controlled lengths is high signal."
+    },
+    {
+      "name": "free_path",
+      "pattern": "\\b(?:kfree_skb|consume_skb|kfree|kvfree|kmem_cache_free)\\b",
+      "weight": 6,
+      "rationale": "skb and object free sites are prime UAF anchors."
+    }
+  ]
+}
