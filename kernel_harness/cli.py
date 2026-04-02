@@ -7,7 +7,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from kernel_harness.autopilot import run_autopilot
+from kernel_harness.autopilot import _candidate_to_prompt_assets, run_autopilot
 from kernel_harness.bundle import write_session_bundle
 from kernel_harness.ingest import load_response, parse_response
 from kernel_harness.session import (
@@ -343,18 +343,15 @@ def _load_manifest(session_dir: Path) -> dict:
         return json.load(handle)
 
 
-def _load_rank_prompt(session_dir: Path, manifest: dict, rank: int) -> tuple[str, Path, Path, str]:
+def _load_rank_prompt(session_dir: Path, manifest: dict, rank: int) -> tuple[str, Path, Path | None, str]:
     candidates = manifest.get("candidates", [])
     if not candidates:
         raise SystemExit("no candidates found in session")
     if rank < 1 or rank > len(candidates):
         raise SystemExit(f"rank out of range: {rank} (1-{len(candidates)})")
     candidate = candidates[rank - 1]
-    bundle_dir = session_dir / "bundles"
-    bundle_prefix = f"{rank:02d}-{candidate['path'].replace('/', '__')}"
-    prompt_path = bundle_dir / f"{bundle_prefix}.md"
-    snippet_path = bundle_dir / f"{bundle_prefix}.snippet.txt"
-    prompt = prompt_path.read_text(encoding="utf-8")
+    repo_root = Path(manifest["repo_root"])
+    prompt, prompt_path, snippet_path = _candidate_to_prompt_assets(session_dir, repo_root, rank, candidate)
     return prompt, prompt_path, snippet_path, candidate["path"]
 
 

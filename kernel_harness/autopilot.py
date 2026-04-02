@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from kernel_harness.ingest import parse_response
+from kernel_harness.prompting import render_bundle_prompt
 from kernel_harness.session import (
     completed_ranks,
     load_state,
@@ -371,6 +372,84 @@ def _ingest_pending_response(session_dir: Path, findings_dir: Path, findings_pat
     }
 
 
+def _candidate_to_prompt_assets(session_dir: Path, repo_root: Path, rank: int, candidate: dict) -> tuple[str, Path, Path | None]:
+    prompt_path, snippet_path = _bundle_paths(session_dir, rank, candidate["path"])
+    if prompt_path.exists():
+        prompt = prompt_path.read_text(encoding="utf-8")
+        return prompt, prompt_path, snippet_path if snippet_path.exists() else None
+
+    candidate_obj = _candidate_from_dict(repo_root, candidate)
+    prompt = render_bundle_prompt(repo_root, candidate_obj)
+    generated_dir = session_dir / AUTOPILOT_DIRNAME / "generated"
+    generated_dir.mkdir(parents=True, exist_ok=True)
+    prompt_path = generated_dir / f"{rank:02d}-{candidate['path'].replace('/', '__')}.md"
+    prompt_path.write_text(prompt, encoding="utf-8")
+
+    snippet_text = _extract_snippet_from_candidate_dict(repo_root, candidate)
+    if snippet_text:
+        snippet_path = generated_dir / f"{rank:02d}-{candidate['path'].replace('/', '__')}.snippet.txt"
+        snippet_path.write_text(snippet_text, encoding="utf-8")
+        return prompt, prompt_path, snippet_path
+    return prompt, prompt_path, None
+
+
+def _candidate_from_dict(repo_root: Path, candidate: dict):
+    from kernel_harness.models import Candidate, ExternalSignal, Signal
+
+    signals = [
+        Signal(
+            name=item["name"],
+            weight=item["weight"],
+            line_no=item["line_no"],
+            line=item["line"],
+            rationale=item["rationale"],
+        )
+        for item in candidate.get("signals", [])
+    ]
+    external_signals = [
+        ExternalSignal(
+            source=item["source"],
+            weight=item["weight"],
+            summary=item["summary"],
+            url=item.get("url", ""),
+            metadata=item.get("metadata", {}),
+        )
+        for item in candidate.get("external_signals", [])
+    ]
+    return Candidate(
+        path=repo_root / candidate["path"],
+        subsystem=candidate["subsystem"],
+        entrypoint=candidate["entrypoint"],
+        score=candidate["score"],
+        signals=signals,
+        path_signals=list(candidate.get("path_signals", [])),
+        reasons=list(candidate.get("reasons", [])),
+        external_signals=external_signals,
+    )
+
+
+def _extract_snippet_from_candidate_dict(repo_root: Path, candidate: dict, radius: int = 4) -> str:
+    path = repo_root / candidate["path"]
+    try:
+        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except OSError:
+        return ""
+
+    seen: set[tuple[int, int]] = set()
+    blocks: list[str] = []
+    for signal in candidate.get("signals", [])[:6]:
+        line_no = int(signal["line_no"])
+        start = max(1, line_no - radius)
+        end = min(len(lines), line_no + radius)
+        if (start, end) in seen:
+            continue
+        seen.add((start, end))
+        header = f"## lines {start}-{end} [{signal['name']}]"
+        body = "\n".join(f"{n:>6} {lines[n - 1]}" for n in range(start, end + 1))
+        blocks.append(f"{header}\n{body}")
+    return "\n\n".join(blocks) + ("\n" if blocks else "")
+
+
 def _archive_response_file(session_dir: Path, fixed_response: Path) -> Path:
     archive_dir = response_archive_dir(session_dir)
     archive_dir.mkdir(parents=True, exist_ok=True)
@@ -413,8 +492,8 @@ def _render_next_prompt(session_dir: Path, *, include_snippet: bool) -> dict:
         }
 
     rank, candidate = _next_pending_rank(state, manifest)
-    prompt_path, snippet_path = _bundle_paths(session_dir, rank, candidate["path"])
-    prompt = prompt_path.read_text(encoding="utf-8")
+    repo_root = Path(manifest["repo_root"])
+    prompt, prompt_path, snippet_path = _candidate_to_prompt_assets(session_dir, repo_root, rank, candidate)
     set_pending_review(session_dir, rank, candidate["path"], str(prompt_path))
     return {
         "repo_root": manifest["repo_root"],
