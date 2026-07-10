@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="520" viewBox="0 0 1400 520" role="img" aria-labelledby="title desc">
+  <title id="title">Kernel Codex Harness architecture</title>
+  <desc id="desc">A flow from Linux kernel inputs through heuristic targeting and ranked session bundles into manual or automated Codex review, followed by verdict ingestion and persistent state.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#475569"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+    <style>
+      .title { font: 700 27px Inter, ui-sans-serif, system-ui, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 14px Inter, ui-sans-serif, system-ui, sans-serif; fill: #475569; }
+      .box-title { font: 700 18px Inter, ui-sans-serif, system-ui, sans-serif; fill: #0f172a; }
+      .box-text { font: 400 14px Inter, ui-sans-serif, system-ui, sans-serif; fill: #334155; }
+      .step { font: 700 12px Inter, ui-sans-serif, system-ui, sans-serif; fill: #ffffff; letter-spacing: 0.08em; }
+      .note { font: 600 15px Inter, ui-sans-serif, system-ui, sans-serif; fill: #7c2d12; }
+      .arrow { stroke: #475569; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .feedback { stroke: #64748b; stroke-width: 2; stroke-dasharray: 7 6; fill: none; marker-end: url(#arrow); }
+      .feedback-label { font: 600 12px Inter, ui-sans-serif, system-ui, sans-serif; fill: #475569; }
+    </style>
+  </defs>
+
+  <rect width="1400" height="520" rx="18" fill="#f8fafc"/>
+  <text x="48" y="48" class="title">Kernel Codex Harness — Investigation Pipeline</text>
+  <text x="48" y="76" class="subtitle">Heuristic prioritization allocates LLM review effort; it does not establish vulnerability proof.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="48" y="132" width="220" height="212" rx="14" fill="#ffffff" stroke="#94a3b8"/>
+    <rect x="48" y="132" width="220" height="34" rx="14" fill="#334155"/>
+    <rect x="48" y="152" width="220" height="14" fill="#334155"/>
+    <text x="64" y="154" class="step">01 · INPUTS</text>
+    <text x="64" y="198" class="box-title">Kernel Context</text>
+    <text x="64" y="229" class="box-text">Linux source tree</text>
+    <text x="64" y="256" class="box-text">Subsystem profile</text>
+    <text x="64" y="283" class="box-text">Optional syzbot cache</text>
+    <text x="64" y="318" class="subtitle">Scope before analysis</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="326" y="132" width="236" height="212" rx="14" fill="#eff6ff" stroke="#60a5fa"/>
+    <rect x="326" y="132" width="236" height="34" rx="14" fill="#2563eb"/>
+    <rect x="326" y="152" width="236" height="14" fill="#2563eb"/>
+    <text x="342" y="154" class="step">02 · PRIORITIZE</text>
+    <text x="342" y="198" class="box-title">Heuristic Targeting</text>
+    <text x="342" y="229" class="box-text">Path and profile weights</text>
+    <text x="342" y="256" class="box-text">Kernel-specific C signals</text>
+    <text x="342" y="283" class="box-text">Crash/file overlap</text>
+    <text x="342" y="318" class="subtitle">Explainable score reasons</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="620" y="132" width="236" height="212" rx="14" fill="#f0fdf4" stroke="#4ade80"/>
+    <rect x="620" y="132" width="236" height="34" rx="14" fill="#16a34a"/>
+    <rect x="620" y="152" width="236" height="14" fill="#16a34a"/>
+    <text x="636" y="154" class="step">03 · PACKAGE</text>
+    <text x="636" y="198" class="box-title">Ranked Session</text>
+    <text x="636" y="229" class="box-text">targets.json</text>
+    <text x="636" y="256" class="box-text">Prompt bundles</text>
+    <text x="636" y="283" class="box-text">Signal-centered snippets</text>
+    <text x="636" y="318" class="subtitle">Reproducible review unit</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="916" y="104" width="190" height="116" rx="14" fill="#fff7ed" stroke="#fb923c"/>
+    <rect x="916" y="104" width="190" height="32" rx="14" fill="#ea580c"/>
+    <rect x="916" y="122" width="190" height="14" fill="#ea580c"/>
+    <text x="932" y="126" class="step">04A · MANUAL</text>
+    <text x="932" y="168" class="box-title">Focused Review</text>
+    <text x="932" y="196" class="box-text">One ranked target</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="916" y="256" width="190" height="116" rx="14" fill="#faf5ff" stroke="#c084fc"/>
+    <rect x="916" y="256" width="190" height="32" rx="14" fill="#9333ea"/>
+    <rect x="916" y="274" width="190" height="14" fill="#9333ea"/>
+    <text x="932" y="278" class="step">04B · AUTOPILOT</text>
+    <text x="932" y="320" class="box-title">Budgeted Loop</text>
+    <text x="932" y="348" class="box-text">read-only by default</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="1166" y="132" width="186" height="212" rx="14" fill="#fef2f2" stroke="#f87171"/>
+    <rect x="1166" y="132" width="186" height="34" rx="14" fill="#dc2626"/>
+    <rect x="1166" y="152" width="186" height="14" fill="#dc2626"/>
+    <text x="1182" y="154" class="step">05 · INGEST</text>
+    <text x="1182" y="198" class="box-title">State &amp; Evidence</text>
+    <text x="1182" y="229" class="box-text">Strict verdict</text>
+    <text x="1182" y="256" class="box-text">1 next target / response</text>
+    <text x="1182" y="283" class="box-text">Manual follow-ups ≤ 2</text>
+    <text x="1182" y="310" class="box-text">Response archive</text>
+    <text x="1182" y="337" class="box-text">Findings and logs</text>
+  </g>
+
+  <path d="M268 238 H318" class="arrow"/>
+  <path d="M562 238 H612" class="arrow"/>
+  <path d="M856 220 C884 220 884 162 908 162" class="arrow"/>
+  <path d="M856 256 C884 256 884 314 908 314" class="arrow"/>
+  <path d="M1106 162 C1136 162 1136 220 1158 220" class="arrow"/>
+  <path d="M1106 314 C1136 314 1136 256 1158 256" class="arrow"/>
+  <path d="M1259 344 V390 H738 V352" class="feedback"/>
+  <rect x="901" y="380" width="194" height="20" rx="10" fill="#f8fafc"/>
+  <text x="998" y="394" text-anchor="middle" class="feedback-label">STATE-SELECTED NEXT TARGET</text>
+
+  <rect x="48" y="414" width="1304" height="62" rx="12" fill="#fff7ed" stroke="#fdba74"/>
+  <text x="700" y="451" text-anchor="middle" class="note">Human validation boundary: reachability, invariant break, and concrete impact must be verified before reporting.</text>
+</svg>
