@@ -1,198 +1,262 @@
 # Kernel Codex Harness
 
-`Kernel Codex Harness`는 Linux 커널 소스 트리에서 취약점 후보가 될 만한 고위험 파일을 먼저 좁히고, Codex가 바로 조사에 들어갈 수 있도록 분석 번들과 프롬프트를 생성하는 하네스다.
+[![CI](https://github.com/foxirain/linux-kernel-codex-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/foxirain/linux-kernel-codex-harness/actions/workflows/ci.yml)
 
-핵심 목표는 두 가지다.
+> **Status — archived portfolio project.** Linux 커널 취약점 조사에서 LLM의 탐색 범위를 어떻게 좁힐지 실험한 프로젝트입니다. 실제 취약점을 증명하거나 보안성을 보장하는 도구는 아닙니다.
 
-- Codex 토큰과 조사 시간을 `고위험 엔트리포인트`에 집중시킨다.
-- `실제 CVE 후보`가 될 가능성이 높은 커널 버그 패턴에 맞춰 조사 흐름을 표준화한다.
+`Kernel Codex Harness`는 Linux 커널 소스 트리에서 userspace-reachable attack surface와 취약점 관련 신호를 점수화하고, Codex가 바로 조사할 수 있는 타깃별 프롬프트와 상태 기반 검토 세션을 생성합니다.
 
-## 왜 이런 구조인가
+## 해결하려던 문제
 
-Protect AI의 `vulnhuntr`는 `엔트리 파일 분석 → 추가 컨텍스트 요청 → 취약점별 2차 분석 → 구조화된 결과물` 흐름을 사용한다. 이 하네스는 그 아이디어를 커널에 맞게 옮겼다.
+Linux 커널 전체를 LLM에 넓게 탐색시키면 다음 문제가 생깁니다.
 
-- 원본 레퍼런스: https://github.com/protectai/vulnhuntr?tab=readme-ov-file
-- 참고한 포인트
-  - 초기 파일 단위 분석 후 추가 컨텍스트 확장
-  - 취약점 클래스별 재평가
-  - confidence와 PoC 중심의 산출물
-- 커널 버전으로 바꾼 포인트
-  - `remote input` 대신 `userspace reachable kernel surface`에 집중
-  - Python call-chain 대신 `syscall/ioctl/netlink/procfs/bpf/fs/driver` 경계를 우선 선별
-  - 커널답게 `UAF/refcount/race/usercopy/size truncation/infoleak/capability check`를 기본 감사 축으로 둠
-  - `syzbot` 공개 크래시 데이터를 붙여 실제 퍼징 힌트를 점수에 반영할 수 있게 함
+- 코드베이스가 너무 커서 조사 컨텍스트가 빠르게 분산됩니다.
+- 높은 점수의 정적 패턴도 실제 userspace reachability가 없으면 보안 이슈가 아닙니다.
+- 한 타깃에서 추가 caller, teardown, free path를 찾는 과정이 반복됩니다.
+- 여러 번의 모델 실행 결과를 같은 기준으로 기록하고 다음 타깃으로 넘기기 어렵습니다.
 
-## 지금 된 상태
+이 프로젝트는 취약점을 직접 판정하는 대신, **조사할 가치가 높은 파일을 먼저 좁히고 검토 흐름을 재현 가능하게 만드는 것**에 집중했습니다.
 
-이 레포는 이제 단순 스캐너가 아니라 `실행 가능한 Codex 운영 하네스`다.
+## 설계 철학
 
-- `scan`: 커널 트리 스캔 후 세션 생성
-- `inspect`: 생성된 세션 우선순위 요약 출력
-- `codex`: Codex CLI에 바로 붙여 넣을 조사 프롬프트 출력
-- `syzbot-fetch`: syzbot 대시보드에서 버그 데이터를 가져와 JSON 캐시 생성
-- `syzbot-stats`: 저장한 syzbot JSON 요약
-- built-in profile: `default`, `net`, `fs`, `io_uring`, `bpf`, `drivers`
+1. **Prioritize, do not prove**
+   정규식과 경로 점수는 증거가 아니라 조사 순서를 정하는 힌트로만 사용합니다.
+2. **Reachability first**
+   `syscall`, `ioctl`, `netlink`, `procfs`, `BPF`, filesystem, driver 경계처럼 userspace에서 도달 가능한 진입점을 먼저 확인합니다.
+3. **One branch at a time**
+   한 번에 한 파일과 짧은 follow-up만 허용해 모델 컨텍스트가 불필요하게 확장되는 것을 막습니다.
+4. **Evidence over generic advice**
+   attacker control, 깨지는 invariant, 구체적 impact를 설명하지 못하면 강한 finding으로 취급하지 않습니다.
+5. **Persist the investigation**
+   후보 점수, 프롬프트, 응답, verdict, 다음 타깃을 파일 기반 세션으로 남겨 실행 과정을 다시 확인할 수 있게 합니다.
 
-## 빠른 시작
+초기 아이디어는 Protect AI의 [vulnhuntr](https://github.com/protectai/vulnhuntr)에서 사용한 `entrypoint prioritization → context expansion → structured result` 흐름에서 영감을 받았고, 이를 Linux 커널의 lifetime, usercopy, refcount, size 검증 문제에 맞게 조정했습니다.
 
-기본 스캔:
+## 동작 구조
 
-```bash
-cd /linux_harness
-python -m kernel_harness scan /path/to/linux --profile default --out /linux_harness/artifacts
+```text
+Linux kernel tree
+  + subsystem profile
+  + optional syzbot cache
+          │
+          ▼
+  heuristic targeting
+          │
+          ▼
+   ranked candidates
+          │
+          ▼
+ prompt/snippet bundles
+          │
+          ├── manual Codex workflow
+          └── time-budgeted autopilot
+                    │
+                    ▼
+          verdict + next target
+                    │
+                    ▼
+          review state + findings
 ```
 
-syzbot까지 붙여서 스캔:
+주요 모듈의 책임은 다음과 같습니다.
+
+| 모듈 | 역할 |
+| --- | --- |
+| `targeting.py` | 커널 파일 탐색, 정규식·경로·syzbot 점수화 |
+| `models.py` | `Candidate`, `Signal`, `ExternalSignal` 모델 |
+| `bundle.py` / `prompting.py` | 세션 인덱스, 프롬프트, 코드 스니펫 생성 |
+| `session.py` / `ingest.py` | 검토 상태 저장과 Codex 응답 계약 해석 |
+| `autopilot.py` | 시간 예산 기반 `codex exec` 반복 실행과 로그 보존 |
+| `syzbot.py` | 공개 syzbot 페이지 수집과 로컬 JSON 캐시 생성 |
+
+## 탐지 신호와 프로필
+
+기본 스캐너는 다음 신호를 조합합니다.
+
+- `ioctl`, compat handler, file operation hook
+- `copy_from_user`, `copy_to_user`, `__user`
+- `kmalloc`, `kzalloc`, `kvmalloc`, cache allocation과 free path
+- refcount, atomic, kref 연산
+- size와 length 계산, memcpy 계열
+- lock, RCU, async lifetime 관련 패턴
+- BPF, skb, XDP, netlink 경계
+- capability와 namespace check
+- syzbot file/subsystem overlap
+
+내장 프로필은 `default`, `net`, `fs`, `io_uring`, `bpf`, `drivers`입니다. 각 프로필은 조사 범위와 가중치를 좁혀 전체 커널을 한 세션에서 과도하게 훑지 않도록 합니다.
+
+## 요구사항과 설치
+
+- Python 3.11 이상
+- autopilot 사용 시 [Codex CLI](https://developers.openai.com/codex/cli/)와 인증
+- `syzbot-fetch`로 원격 URL을 읽을 때만 네트워크 연결
 
 ```bash
-python -m kernel_harness syzbot-fetch https://syzkaller.appspot.com/upstream --out /linux_harness/artifacts/syzbot/upstream.json --limit 50
-python -m kernel_harness scan /path/to/linux --profile net --syzbot-json /linux_harness/artifacts/syzbot/upstream.json --out /linux_harness/artifacts
+git clone https://github.com/foxirain/linux-kernel-codex-harness.git
+cd linux-kernel-codex-harness
+
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install .
+
+kernel-harness --help
 ```
 
-상위 후보 확인:
+내장 프로필은 wheel에 함께 포함되므로 설치 후 별도 config 경로를 지정하지 않아도 됩니다. 직접 만든 JSON 규칙은 `--config /path/to/profile.json`으로 전달할 수 있습니다.
+
+## 2분 Quick Start
+
+세션을 생성합니다.
 
 ```bash
-python -m kernel_harness inspect /linux_harness/artifacts/session-YYYYMMDDTHHMMSSZ --top 10
+kernel-harness scan /path/to/linux \
+  --profile net \
+  --limit 80 \
+  --top 20 \
+  --out artifacts
 ```
 
-Codex CLI용 프롬프트 출력:
+`--limit`은 유지할 후보 수이고, `--top`은 처음에 미리 만들 prompt bundle 수입니다. 이후 rank의 bundle도 요청 시 생성할 수 있습니다.
+
+상위 후보를 확인합니다.
 
 ```bash
-python -m kernel_harness codex /linux_harness/artifacts/session-YYYYMMDDTHHMMSSZ --rank 1 --include-snippet
+kernel-harness inspect artifacts/session-YYYYMMDDTHHMMSSZ --top 10
 ```
 
-시간 예산 기반 완전 자동 실행:
+수동 조사 프롬프트를 출력합니다.
 
 ```bash
-python3 -m kernel_harness autopilot /linux_harness/artifacts/session-YYYYMMDDTHHMMSSZ \
-  --duration 1h \
-  --per-run-timeout 20m \
+kernel-harness codex artifacts/session-YYYYMMDDTHHMMSSZ \
+  --rank 1 \
   --include-snippet
 ```
 
-예전 방식도 유지된다.
+시간 예산 기반 autopilot을 실행할 수도 있습니다.
 
 ```bash
-python -m kernel_harness /path/to/linux
+kernel-harness autopilot artifacts/session-YYYYMMDDTHHMMSSZ \
+  --duration 30m \
+  --per-run-timeout 10m \
+  --include-snippet
 ```
 
-## 생성 산출물
+autopilot의 기본 sandbox는 `read-only`입니다. 조사 과정에서 파일 변경이 정말 필요한 경우에만 `--sandbox workspace-write`를 명시해야 합니다.
 
-실행 결과는 `artifacts/session-<timestamp>/` 아래에 생성된다.
+## syzbot 신호 추가
 
-- `targets.json`: 점수화된 후보 목록
-- `SESSION.md`: 우선순위 인덱스와 운영 순서
-- `finding_template.json`: CVE 후보 보고서 템플릿
-- `bundles/*.md`: Codex에 바로 넣을 타깃별 감사 프롬프트
-- `bundles/*.snippet.txt`: 신호 주변 코드 일부
+```bash
+kernel-harness syzbot-fetch https://syzkaller.appspot.com/upstream \
+  --out artifacts/syzbot/upstream.json \
+  --limit 50
 
-## syzbot 연동이 하는 일
+kernel-harness scan /path/to/linux \
+  --profile fs \
+  --syzbot-json artifacts/syzbot/upstream.json \
+  --out artifacts
+```
 
-`syzbot`은 퍼징으로 실제 커널 크래시를 수집하는 시스템이다. 이 하네스는 공개 버그 페이지에서 다음 정보를 긁어와 로컬 JSON으로 저장한다.
+syzbot overlap은 실제 크래시와 가까운 코드를 먼저 보게 하는 힌트입니다. 같은 파일 또는 subsystem에서 crash가 있었다는 사실만으로 새로운 취약점이 입증되지는 않습니다.
 
-- bug title
-- subsystem
-- bug type
-- file:line 히트
-- bug URL
-
-그 다음 `scan --syzbot-json ...`을 쓰면:
-
-- exact file overlap이 있는 파일 점수를 크게 올리고
-- 같은 subsystem에서 최근 많이 깨진 코드도 약하게 올리고
-- Codex prompt 안에 `syzbot context`를 넣어 준다
-
-즉 `정적 냄새`와 `실제 크래시 힌트`를 합치는 방식이다.
-
-## 프로필 추천
-
-- `default`: 전체 훑기용 시작점
-- `net`: netlink, socket ops, skb, XDP 계열 집중
-- `fs`: ioctl, procfs, seq_file, debugfs 계열 집중
-- `io_uring`: async lifetime, request teardown 집중
-- `bpf`: verifier, map/program lifetime, BTF 경계 집중
-- `drivers`: ioctl, DMA, MMIO 기반 드라이버 공격면 집중
-
-## 추천 운영 방식
-
-가장 점수가 높은 번들부터 순서대로 Codex에 투입한다. 한 번에 너무 넓게 보지 말고, 각 세션에서 다음 순서로 좁혀가는 게 효율적이다.
-
-1. 타깃 파일 하나를 열어 userspace entrypoint를 확정한다.
-2. allocation, refcount, error unwind, free path를 우선 추적한다.
-3. syzbot context가 있으면 같은 invariant인지, nearby variant인지 따진다.
-4. 확실한 invariant break가 나오면 finding 템플릿으로 고정한다.
-5. 애매하면 인접 파일 2~3개만 추가로 본다.
-6. 서브시스템별로 profile이나 pattern weight를 조정해서 다시 돌린다.
-
-## Codex CLI에서 쓰는 법
-
-자세한 절차는 아래 문서에 정리했다.
-
-- `/linux_harness/docs/CODEX_CLI.md`
-- `/linux_harness/docs/CODEX_WORKFLOW.md`
-- `/linux_harness/docs/SYZBOT.md`
-
-핵심만 요약하면:
-
-1. `syzbot-fetch`로 퍼징 힌트를 가져온다.
-2. `scan --syzbot-json ...`으로 세션을 만든다.
-3. `inspect`로 상위 타깃을 고른다.
-4. `codex --rank N`으로 프롬프트를 출력한다.
-5. 커널 트리에서 `codex`를 실행하고 그 프롬프트를 그대로 붙여 넣는다.
-
-## 커널에서 특히 잘 나오는 감사 축
-
-- `ioctl` 핸들러의 크기 검증 누락
-- compat/native 경로 불일치
-- refcount 증가/감소 불균형
-- async teardown 중 UAF
-- usercopy 길이 검증 실패
-- `size_t`, `u32`, `unsigned long` 사이 truncation
-- `copy_to_user` 전 초기화되지 않은 데이터 노출
-- capability/ns boundary check 위치 오류
-- procfs/debugfs/sysfs에서의 느슨한 권한 처리
-- BPF verifier/helper 경계의 타입 혼동
-
-## 디렉터리 구조
+## 세션 산출물
 
 ```text
-/linux_harness
+artifacts/session-<timestamp>/
+├── SESSION.md
+├── targets.json
+├── finding_template.json
+├── review_state.json
+├── codex_response.txt              # pending response가 있을 때
+├── bundles/
+│   ├── <rank>-<target>.md
+│   └── <rank>-<target>.snippet.txt
+├── responses/                      # ingest된 응답 archive
+└── autopilot/
+    ├── AUTOPILOT_STATUS.txt
+    ├── AUTOPILOT_PROGRESS.txt
+    ├── AUTOPILOT_FINDINGS.txt
+    ├── prompts/
+    ├── exec/
+    └── findings/
+```
+
+모델 응답은 다음 다섯 verdict 중 하나로 정규화됩니다.
+
+- `cve_candidate`
+- `plausible_security_bug`
+- `latent_bug`
+- `not_cve_candidate`
+- `needs_more_context`
+
+응답에는 하나의 `Single best next target`만 허용하며, 같은 조사 분기의 manual follow-up은 최대 두 번으로 제한합니다.
+
+## 테스트와 CI
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+회귀 테스트는 allocator 탐지, profile 리소스 로딩, verdict 파싱, follow-up 깊이, stale response 격리, 안전한 sandbox 기본값을 확인합니다.
+
+GitHub Actions는 Python 3.11과 3.12에서 테스트를 실행하고, wheel을 새로 설치한 환경에서 내장 profile 스캔이 동작하는지도 확인합니다.
+
+## 저장소 구조
+
+```text
+.
+├── .github/workflows/ci.yml
 ├── docs/
+│   ├── AUTOPILOT.md
 │   ├── CODEX_CLI.md
 │   ├── CODEX_WORKFLOW.md
 │   └── SYZBOT.md
 ├── kernel_harness/
-│   ├── __init__.py
-│   ├── __main__.py
-│   ├── bundle.py
-│   ├── cli.py
-│   ├── models.py
-│   ├── prompting.py
 │   ├── resources/
 │   │   ├── linux-kernel-default.json
 │   │   └── profiles/
-│   │       ├── bpf.json
-│   │       ├── drivers.json
-│   │       ├── fs.json
-│   │       ├── io_uring.json
-│   │       └── net.json
+│   ├── autopilot.py
+│   ├── bundle.py
+│   ├── cli.py
+│   ├── ingest.py
+│   ├── models.py
+│   ├── prompting.py
+│   ├── session.py
 │   ├── syzbot.py
 │   └── targeting.py
-└── README.md
+├── tests/test_regressions.py
+├── README.md
+└── pyproject.toml
 ```
 
-## 다음 단계 제안
+## 한계와 trade-off
 
-이 하네스는 `정적 신호 기반 우선순위화 + Codex 조사 오케스트레이션 + syzbot 힌트 결합` 버전이다. 다음 단계로 붙이면 더 강해진다.
+- 실제 C AST, call graph, interprocedural data flow를 만들지 않습니다.
+- 정규식 기반이므로 주석, 매크로, 반복 토큰과 큰 파일이 점수에 영향을 줄 수 있습니다.
+- 커널 config, privilege, namespace, device availability에 따른 실제 reachability를 자동 증명하지 않습니다.
+- syzbot 연동은 공개 HTML 구조를 파싱하므로 대시보드 변경의 영향을 받을 수 있습니다.
+- Codex verdict는 조사 결과이지 보안 보고서의 최종 증거가 아닙니다.
+- 실제 finding은 caller, teardown, error path, exploit impact를 사람이 다시 검증해야 합니다.
 
-- 최근 커널 수정 이력에서 `Fixes:`, `Cc: stable`, `KASAN`, `UBSAN` 태그를 반영하는 Git 히스토리 스코어링
-- `syzbot` 크래시와 실제 커밋 수정 이력 자동 매핑
-- 서브시스템별 맞춤 규칙 세트
-- 조사 결과를 누적해서 같은 패턴의 N-day를 자동 재탐색하는 회귀 모드
+이 trade-off는 정밀 정적 분석기를 만드는 대신, 구현이 단순하고 각 점수의 이유를 설명할 수 있는 조사 우선순위 도구를 빠르게 실험하기 위한 선택이었습니다.
 
-## 한계
+## 회고: 지금 다시 만든다면
 
-- 아직 실제 call graph나 C AST를 만들지는 않는다.
-- syzbot 연동은 공개 HTML 페이지 파싱에 의존한다.
-- false positive를 줄이려면 사람이 teardown path와 reachability를 검증해야 한다.
-- 커널 소스 트리 크기가 크므로 첫 버전은 `정밀 분석`보다 `좋은 시작점 선별`에 초점을 둔다.
+당시에는 파일 단위 점수화와 프롬프트 오케스트레이션을 먼저 검증하는 것이 목표였습니다. 지금 다시 만든다면 다음 순서로 발전시킬 것입니다.
+
+1. tree-sitter 또는 Clang 기반 symbol/call graph를 추가합니다.
+2. 파일 크기와 반복 hit를 정규화하고 profile별 calibration fixture를 만듭니다.
+3. `review`와 `runner` 계층을 분리해 CLI와 autopilot의 중복을 줄입니다.
+4. session manifest와 state에 명시적 schema version과 atomic write를 적용합니다.
+5. 모델 응답을 JSON Schema로 제한하고 finding evidence를 구조화합니다.
+6. syzbot crash를 실제 fix commit과 연결해 variant hunting 신호를 강화합니다.
+
+그럼에도 현재 구조에서 유지하고 싶은 핵심은 같습니다. **LLM에게 코드베이스 전체를 막연하게 탐색시키지 않고, reachability와 invariant를 중심으로 좁은 조사 단위를 반복한다는 것**입니다.
+
+## 안전 주의사항
+
+- 기본 `read-only` sandbox를 유지하는 것을 권장합니다.
+- 외부 sandbox가 없는 환경에서는 `--dangerously-bypass-approvals-and-sandbox`를 사용하지 마세요.
+- 신뢰할 수 없는 커널 트리의 코드와 주석은 모델 입력이 되므로 prompt injection 가능성을 고려해야 합니다.
+- 생성된 finding을 공개하거나 보고하기 전에 반드시 사람이 재현성과 영향을 검증해야 합니다.
+
+세부 운영법은 [`docs/`](docs/)에서 확인할 수 있습니다.
