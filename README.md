@@ -4,39 +4,47 @@
 
 <p align="center"><strong>Portfolio Artifact · Original Import: 3 April 2026 · Archival Revision: 10 July 2026</strong></p>
 
+<p align="center"><strong>Core Philosophy — External Signal</strong><br>Let reproducible observations outside model inference guide attention; never mistake priority for proof.</p>
+
 > **Project status.** 이 저장소는 Linux 커널 취약점 조사에서 LLM의 제한된 분석 예산을 어떻게 배분할지 실험한 포트폴리오 프로젝트입니다. 실제 취약점을 자동으로 증명하거나 커널의 보안성을 보장하는 도구가 아닙니다.
 
 ## Abstract
 
-**Abstract—** Linux 커널처럼 규모가 큰 코드베이스를 LLM에 그대로 탐색시키면 컨텍스트가 빠르게 분산되고, 위험한 API의 존재와 실제 공격 가능성이 쉽게 혼동된다. `Kernel Codex Harness`는 이 문제를 취약점 자동 탐지보다 **조사 우선순위 결정과 상태 기반 오케스트레이션**의 문제로 정의한다. 커널 경로, userspace 경계, lifetime·usercopy·refcount·size 관련 정적 신호와 선택적 syzbot crash intelligence를 결합해 후보 파일을 순위화하고, 각 후보를 좁은 프롬프트 번들로 변환한다. 수동 검토와 시간 예산 기반 autopilot은 동일한 응답 계약과 세션 상태를 사용한다. 본 구현은 정밀 정적 분석기가 아니라 설명 가능한 휴리스틱을 통해 LLM 조사 범위를 제한하는 실험이며, 모든 finding은 reachability, invariant break, concrete impact에 대한 사람의 재검증을 요구한다.
+**Abstract—** Linux 커널처럼 규모가 큰 코드베이스를 LLM에 그대로 탐색시키면 컨텍스트가 빠르게 분산되고, 위험한 API의 존재와 실제 공격 가능성이 쉽게 혼동된다. `Kernel Codex Harness`는 이 문제를 취약점 자동 탐지보다 **조사 우선순위 결정과 상태 기반 오케스트레이션**의 문제로 정의한다. 이 프로젝트는 LLM 추론 외부에서 계산한 재현 가능한 관찰값으로 모델의 attention을 통제하는 원칙을 **External Signal**이라 부른다. 커널 경로, userspace 경계, lifetime·usercopy·refcount·size 관련 정적 신호와 선택적 syzbot crash intelligence를 결합해 후보 파일을 순위화하고, 각 후보를 좁은 프롬프트 번들로 변환한다. 수동 검토와 시간 예산 기반 autopilot은 동일한 응답 계약과 세션 상태를 사용한다. 본 구현은 정밀 정적 분석기가 아니라 설명 가능한 휴리스틱을 통해 LLM 조사 범위를 제한하는 실험이며, 모든 finding은 reachability, invariant break, concrete impact에 대한 사람의 재검증을 요구한다.
 
-**Index Terms—** Linux kernel, vulnerability research, LLM orchestration, heuristic prioritization, syzbot, program analysis, Codex.
+**Index Terms—** Linux kernel, vulnerability research, external signal, LLM orchestration, heuristic prioritization, syzbot, program analysis, Codex.
 
 ## I. Introduction
 
 Linux 커널 보안 검토에는 두 종류의 규모 문제가 있다. 첫째, 전체 소스 트리는 한 번의 LLM 컨텍스트로 다루기에 너무 크다. 둘째, `copy_from_user`, allocator, refcount, lock과 같은 신호는 흔하지만 그 자체로 취약점을 의미하지 않는다. 분석자는 먼저 “어디를 볼 것인가”를 결정한 뒤, userspace reachability와 구체적인 상태 전이를 별도로 증명해야 한다.
 
-이 프로젝트의 핵심 가설은 다음과 같다.
+이 프로젝트의 핵심 철학은 **External Signal**이다.
 
-> LLM 기반 커널 보안 분석의 첫 번째 문제는 취약점 생성이 아니라, 제한된 조사 시간과 컨텍스트를 가장 가치 있는 엔트리포인트에 배분하는 것이다.
+> LLM이 스스로 어디를 볼지 결정하게 두지 않는다. 모델 추론 바깥의 재현 가능한 신호가 attention을 배분하되, 취약점 결론은 reachability와 invariant evidence로만 결정한다.
 
 따라서 하네스는 모델에게 커널 전체를 막연하게 탐색시키지 않는다. 파일을 우선순위화하고, 한 번에 하나의 조사 분기만 제공하며, 결론보다 증거 구조를 먼저 요구한다.
 
-## II. Problem Formulation and Design Principles
+## II. External Signal and Design Principles
 
-### A. Prioritization Is Not Proof
+### A. External Signal Before Model Inference
+
+**External Signal**은 LLM이 생성한 판단이 아니라, 모델 실행 전에 결정되며 동일한 소스 트리·profile·저장된 syzbot JSON에서 다시 계산할 수 있는 관찰값이다. 경로 weight, 정규식 hit, cached syzbot overlap이 이에 해당한다. 이 신호는 후보 순위와 프롬프트 컨텍스트에만 사용하며, verdict나 proof로 승격하지 않는다.
+
+이 문서의 **External Signal**은 프로젝트 철학 전체를 가리킨다. 코드의 `ExternalSignal` 데이터 모델은 현재 그중 syzbot에서 유래한 신호만 표현하므로 두 용어의 범위는 다르다.
+
+### B. Prioritization Is Not Proof
 
 정규식 hit, 고위험 경로, syzbot overlap은 모두 조사 순서를 위한 신호다. 점수가 높아도 실제 호출 경로, 권한, 커널 config, namespace, device availability가 공격자의 도달을 허용하지 않으면 보안 finding이 아니다.
 
-### B. Reachability Before Bug Class
+### C. Reachability Before Bug Class
 
 감사는 `syscall`, `ioctl`, `netlink`, `procfs`, filesystem, BPF, driver hook처럼 userspace에서 시작되는 경계를 먼저 확인한다. 이후에야 UAF, OOB, refcount, race, info leak, capability check 같은 bug class를 평가한다.
 
-### C. One Investigation Branch at a Time
+### D. One Investigation Branch at a Time
 
 한 조사 단위는 기본적으로 하나의 파일과 가까운 caller·teardown·free path로 제한된다. 모델이 추천하는 manual follow-up은 최대 두 번만 허용한다. 이 제한은 탐색 능력을 줄이기 위한 것이 아니라, 검증 가능한 범위 안에서 결론을 유지하기 위한 것이다.
 
-### D. Evidence Over Confidence
+### E. Evidence Over Confidence
 
 프롬프트는 강한 finding이 최소한 다음 항목을 설명하도록 요구한다.
 
@@ -48,24 +56,24 @@ Linux 커널 보안 검토에는 두 종류의 규모 문제가 있다. 첫째, 
 
 근거가 부족하면 모델은 취약점을 강하게 주장하는 대신 다음에 확인할 단일 타깃을 반환한다. 이는 **prompt-level evidence contract**이며, 현재 parser가 각 증거의 완결성을 자동 검증하는 것은 아니다. ingestion은 verdict와 next target을 정규화하므로 최종 증거 검증은 사람의 책임이다.
 
-### E. Design Lineage
+### F. Design Lineage
 
 초기 조사 흐름은 Protect AI의 `vulnhuntr`가 사용한 파일 단위 분석, 제한된 컨텍스트 확장, 구조화된 결과물이라는 발상에서 출발했다 [1]. 이 프로젝트에서는 이를 Python 애플리케이션 분석에 그대로 적용하지 않고, userspace-reachable kernel surface, 커널 객체 lifetime, teardown path, syzbot overlap을 중심으로 다시 설계했다. 특히 **우선순위 신호와 취약점 증명을 분리하고, reachability를 bug class보다 먼저 확인하는 것**이 커널 하네스의 핵심 설계 선택이다.
 
 ## III. System Architecture
 
 <p align="center">
-  <img src="docs/assets/kernel-harness-architecture.svg" alt="Kernel Codex Harness architecture" width="100%">
+  <img src="docs/assets/kernel-harness-architecture.svg" alt="External Signal architecture for Kernel Codex Harness" width="960">
 </p>
 
-<p align="center"><strong>Fig. 1.</strong> Kernel source and optional crash intelligence are converted into ranked, reproducible review units. Manual and automated review share the response parser and session-state contract while retaining separate orchestration paths.</p>
+<p align="center"><strong>Fig. 1.</strong> The External Signal layer turns observations computed before model inference into ranked review units. It allocates attention but does not establish vulnerability proof.</p>
 
 **TABLE I — MAJOR MODULE RESPONSIBILITIES**
 
 | Module | Responsibility |
 | --- | --- |
 | `targeting.py` | 커널 파일 탐색과 경로·패턴·syzbot 신호 점수화 |
-| `models.py` | `Candidate`, `Signal`, `ExternalSignal` 데이터 모델 |
+| `models.py` | `Candidate`, `Signal`과 syzbot-derived `ExternalSignal` 데이터 모델 |
 | `bundle.py` | manifest, session index, prompt/snippet bundle 생성 |
 | `prompting.py` | reachability와 invariant 중심의 커널 감사 프롬프트 |
 | `session.py` | pending review, history, follow-up depth 상태 저장 |
@@ -86,7 +94,7 @@ Score(f) = Σ path_weight(f)
          + Σ syzbot_overlap_weight(f)
 ```
 
-이 점수는 확률이나 exploitability 척도가 아니다. 각 항목은 모델이 먼저 확인할 파일을 정하기 위한 상대적 순서만 제공한다. 현재 구현은 모든 line-level match를 합산하고, prompt에 표시할 상위 신호만 제한한다. syzbot weight는 path·line 휴리스틱으로 먼저 후보가 된 파일에 사후 적용되며, syzbot hit만으로 새로운 후보 파일을 생성하지는 않는다.
+이 점수는 확률이나 exploitability 척도가 아니다. 각 항목은 모델이 먼저 확인할 파일을 정하기 위한 상대적 순서만 제공한다. 현재 구현은 모든 line-level match를 합산하고, prompt에 표시할 상위 신호만 제한한다. 동일한 결과의 재계산은 같은 source tree, profile과 cached syzbot JSON을 전제로 한다. syzbot weight는 path·line 휴리스틱으로 먼저 후보가 된 파일에 사후 적용되며, syzbot hit만으로 새로운 후보 파일을 생성하지는 않는다.
 
 주요 정적 신호는 다음과 같다.
 
@@ -105,7 +113,7 @@ Score(f) = Σ path_weight(f)
 
 ### C. Crash Intelligence
 
-`syzbot-fetch`는 syzkaller 프로젝트의 공개 syzbot bug page [2]에서 title, subsystem, bug type, file:line 정보를 추출해 JSON cache로 저장한다. exact file overlap은 강한 우선순위 신호로, subsystem overlap은 약한 신호로 사용한다. crash 정보는 variant hunting의 출발점일 뿐 새로운 취약점의 증거로 취급하지 않는다.
+`syzbot-fetch`는 syzkaller 프로젝트의 공개 syzbot bug page [2]에서 title, subsystem, bug type, file:line 정보를 추출해 JSON cache로 저장한다. exact file overlap은 강한 External Signal로, subsystem overlap은 약한 External Signal로 사용한다. live dashboard는 변할 수 있으므로 재현 단위는 fetch 시점의 저장된 JSON이다. crash 정보는 variant hunting의 출발점일 뿐 새로운 취약점의 증거로 취급하지 않는다.
 
 ### D. Session and Review Contract
 
@@ -259,11 +267,11 @@ Git history에 기록된 최초 버전부터 목표는 “LLM이 취약점을 �
 5. JSON Schema 기반 model response와 structured evidence,
 6. syzbot crash, fix commit, nearby variant의 자동 연결.
 
-그럼에도 유지하고 싶은 중심 원칙은 같다. **LLM에게 코드베이스 전체를 막연하게 탐색시키지 않고, reachability와 invariant를 중심으로 좁은 조사 단위를 반복한다.**
+그럼에도 유지하고 싶은 중심 원칙은 **External Signal**이다. **LLM에게 코드베이스 전체를 막연하게 탐색시키지 않고, 모델 바깥의 신호로 좁힌 조사 단위를 reachability와 invariant 중심으로 반복한다.**
 
 ## X. Conclusion
 
-`Kernel Codex Harness`는 Linux 커널 취약점 탐지를 대체하지 않는다. 대신 정적 냄새와 crash intelligence를 설명 가능한 순위로 바꾸고, LLM 검토를 짧고 상태가 있는 조사 과정으로 제한한다. 이 프로젝트의 주된 결과물은 새로운 분석 알고리즘보다도, LLM 보안 검토를 **attention allocation, evidence contract, reproducible orchestration**의 문제로 다룬 설계다.
+`Kernel Codex Harness`는 Linux 커널 취약점 탐지를 대체하지 않는다. 대신 External Signal을 설명 가능한 순위로 바꾸고, LLM 검토를 짧고 상태가 있는 조사 과정으로 제한한다. 이 프로젝트의 주된 결과물은 새로운 분석 알고리즘보다도, LLM 보안 검토를 **external-signal attention allocation, evidence contract, reproducible orchestration**의 문제로 다룬 설계다.
 
 ## Appendix A. Repository Layout
 
