@@ -2,15 +2,15 @@
 
 [![CI](https://github.com/foxirain/linux-kernel-codex-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/foxirain/linux-kernel-codex-harness/actions/workflows/ci.yml)
 
-<p align="center"><strong>Portfolio Artifact · Original Import: 3 April 2026 · Archival Revision: 10 July 2026</strong></p>
+<p align="center"><strong>Research Tool · Original Import: 3 April 2026 · Documentation Revision: 11 July 2026</strong></p>
 
 <p align="center"><strong>Core Philosophy — External Signal</strong><br>Let reproducible observations outside model inference guide attention; never mistake priority for proof.</p>
 
-> **Project status.** 이 저장소는 Linux 커널 취약점 조사에서 LLM의 제한된 분석 예산을 어떻게 배분할지 실험한 포트폴리오 프로젝트입니다. 실제 취약점을 자동으로 증명하거나 커널의 보안성을 보장하는 도구가 아닙니다.
+> **Project status.** 이 저장소는 실제 Linux 커널 취약점 조사를 위해 구축하고 사용한 LLM-assisted research harness의 초기 버전입니다. 이 버전은 [CVE-2026-31720](https://nvd.nist.gov/vuln/detail/CVE-2026-31720)으로 공개된 취약점을 발견하는 데 사용됐습니다. 하네스는 조사 대상을 우선순위화하지만 취약점을 자동으로 증명하거나 커널의 보안성을 보장하지 않으며, 최종 검증과 보고는 사람이 수행합니다.
 
 ## Abstract
 
-**Abstract—** Linux 커널처럼 규모가 큰 코드베이스를 LLM에 그대로 탐색시키면 컨텍스트가 빠르게 분산되고, 위험한 API의 존재와 실제 공격 가능성이 쉽게 혼동된다. `Kernel Codex Harness`는 이 문제를 취약점 자동 탐지보다 **조사 우선순위 결정과 상태 기반 오케스트레이션**의 문제로 정의한다. 이 프로젝트는 LLM 추론 외부에서 계산한 재현 가능한 관찰값으로 모델의 attention을 통제하는 원칙을 **External Signal**이라 부른다. 커널 경로, userspace 경계, lifetime·usercopy·refcount·size 관련 정적 신호와 선택적 syzbot crash intelligence를 결합해 후보 파일을 순위화하고, 각 후보를 좁은 프롬프트 번들로 변환한다. 수동 검토와 시간 예산 기반 autopilot은 동일한 응답 계약과 세션 상태를 사용한다. 본 구현은 정밀 정적 분석기가 아니라 설명 가능한 휴리스틱을 통해 LLM 조사 범위를 제한하는 실험이며, 모든 finding은 reachability, invariant break, concrete impact에 대한 사람의 재검증을 요구한다.
+**Abstract—** Linux 커널처럼 규모가 큰 코드베이스를 LLM에 그대로 탐색시키면 컨텍스트가 빠르게 분산되고, 위험한 API의 존재와 실제 공격 가능성이 쉽게 혼동된다. `Kernel Codex Harness`는 이 문제를 취약점 자동 탐지보다 **조사 우선순위 결정과 상태 기반 오케스트레이션**의 문제로 정의한다. 이 프로젝트는 LLM 추론 외부에서 계산한 재현 가능한 관찰값으로 모델의 attention을 통제하는 원칙을 **External Signal**이라 부른다. 커널 경로, userspace 경계, lifetime·usercopy·refcount·size 관련 정적 신호와 선택적 syzbot crash intelligence를 결합해 후보 파일을 순위화하고, 각 후보를 좁은 프롬프트 번들로 변환한다. 수동 검토와 시간 예산 기반 autopilot은 동일한 응답 계약과 세션 상태를 사용한다. 이 하네스는 실제 Linux 커널 조사에서 USB gadget audio 경로의 stack out-of-bounds write를 발견하는 데 사용됐고, 해당 결함은 [CVE-2026-31720](https://nvd.nist.gov/vuln/detail/CVE-2026-31720)으로 공개됐다. 본 구현은 정밀 정적 분석기가 아니라 설명 가능한 휴리스틱으로 LLM 조사 범위를 제한하는 research workflow이며, 모든 finding은 reachability, invariant break, concrete impact에 대한 사람의 재검증을 요구한다.
 
 **Index Terms—** Linux kernel, vulnerability research, external signal, LLM orchestration, heuristic prioritization, syzbot, program analysis, Codex.
 
@@ -217,11 +217,19 @@ artifacts/session-<timestamp>/
     └── findings/
 ```
 
-## VI. Verification
+## VI. Operational Outcome and Verification
+
+이 버전은 개념 증명에 머물지 않고 실제 Linux 커널 취약점 조사에 사용됐다.
+
+**TABLE II — DISCLOSED VULNERABILITY OUTCOME**
+
+| Public outcome | Affected area | Vulnerability | Investigation model |
+| --- | --- | --- | --- |
+| [CVE-2026-31720](https://nvd.nist.gov/vuln/detail/CVE-2026-31720) | USB gadget audio · `drivers/usb/gadget/function/f_uac1_legacy.c` | Host-controlled request length could overflow a four-byte stack object | Finding surfaced during a v1-assisted investigation; validation and disclosure remained human-led |
 
 검증은 탐지 정확도 benchmark가 아니라 구현의 회귀와 배포 가능성에 초점을 둔다.
 
-**TABLE II — ENGINEERING VERIFICATION SCOPE**
+**TABLE III — ENGINEERING VERIFICATION SCOPE**
 
 | Verification item | Expected property |
 | --- | --- |
@@ -237,7 +245,7 @@ artifacts/session-<timestamp>/
 python -m unittest discover -s tests -v
 ```
 
-GitHub Actions는 unit regression을 실행한 뒤 wheel을 새 환경에 설치하고 `default` profile scan을 smoke-test한다. 본 저장소는 실제 Linux tree corpus에 대한 precision, recall, CVE discovery rate를 주장하지 않는다.
+GitHub Actions는 unit regression을 실행한 뒤 wheel을 새 환경에 설치하고 `default` profile scan을 smoke-test한다. 위 공개 사례는 실제 조사에서 얻은 operational outcome이지만 대표 Linux tree corpus에서 측정한 precision, recall 또는 CVE discovery rate benchmark는 아니다.
 
 ## VII. Safety Considerations
 
@@ -254,11 +262,11 @@ GitHub Actions는 unit regression을 실행한 뒤 wheel을 새 환경에 설치
 3. **Reachability gap.** 커널 config, privilege, namespace, device availability를 자동 모델링하지 않는다.
 4. **External data fragility.** syzbot integration은 공개 HTML 구조 변경의 영향을 받는다.
 5. **Model dependence.** 결과 품질은 사용한 모델, prompt interpretation, repository context에 의존한다.
-6. **Evaluation scope.** 현재 테스트는 software regression을 검증하며 보안 탐지 성능을 측정하지 않는다.
+6. **Evaluation scope.** 현재 테스트는 software regression을 검증한다. 공개된 CVE 사례는 실제 사용 결과이지만 보안 탐지 성능에 대한 통계적 평가를 대체하지 않는다.
 
 ## IX. Retrospective
 
-Git history에 기록된 최초 버전부터 목표는 “LLM이 취약점을 알아서 찾게 하는 것”보다 “어떤 코드를 먼저 보고 어떤 증거를 요구할지 통제하는 것”에 가까웠다. 지금 다시 구현한다면 다음을 우선한다.
+Git history에 기록된 최초 버전부터 목표는 “LLM이 취약점을 알아서 찾게 하는 것”보다 “어떤 코드를 먼저 보고 어떤 증거를 요구할지 통제하는 것”에 가까웠다. CVE-2026-31720을 발견한 v1-assisted 조사는 좁은 investigation unit과 evidence contract가 실제 연구에 적용된 사례를 제공했다. [v2](https://github.com/foxirain/linux-kernel-codex-harness-v2)는 이 workflow를 repository state와 known reference를 함께 보존하는 provenance-aware triage까지 확장했다. 지금 다시 구현한다면 다음을 우선한다.
 
 1. tree-sitter 또는 Clang 기반 symbol/call graph,
 2. 파일 크기와 반복 hit를 고려한 score normalization,
@@ -271,7 +279,7 @@ Git history에 기록된 최초 버전부터 목표는 “LLM이 취약점을 �
 
 ## X. Conclusion
 
-`Kernel Codex Harness`는 Linux 커널 취약점 탐지를 대체하지 않는다. 대신 External Signal을 설명 가능한 순위로 바꾸고, LLM 검토를 짧고 상태가 있는 조사 과정으로 제한한다. 이 프로젝트의 주된 결과물은 새로운 분석 알고리즘보다도, LLM 보안 검토를 **external-signal attention allocation, evidence contract, reproducible orchestration**의 문제로 다룬 설계다.
+`Kernel Codex Harness`는 Linux 커널 취약점 탐지를 대체하지 않는다. 대신 External Signal을 설명 가능한 순위로 바꾸고, LLM 검토를 짧고 상태가 있는 조사 과정으로 제한한다. 이 구조는 실제 조사에서 CVE-2026-31720 발견에 사용됐다. 프로젝트의 핵심 결과는 새로운 분석 알고리즘을 주장하는 데 있지 않고, LLM 보안 검토를 **external-signal attention allocation, evidence contract, reproducible orchestration**의 문제로 정의하고 실전 연구 workflow에 적용한 데 있다.
 
 ## Appendix A. Repository Layout
 
