@@ -157,14 +157,6 @@ python -m kernel_harness /path/to/linux
 
 ```text
 /linux_harness
-├── configs/
-│   ├── linux-kernel-default.json
-│   └── profiles/
-│       ├── bpf.json
-│       ├── drivers.json
-│       ├── fs.json
-│       ├── io_uring.json
-│       └── net.json
 ├── docs/
 │   ├── CODEX_CLI.md
 │   ├── CODEX_WORKFLOW.md
@@ -176,6 +168,14 @@ python -m kernel_harness /path/to/linux
 │   ├── cli.py
 │   ├── models.py
 │   ├── prompting.py
+│   ├── resources/
+│   │   ├── linux-kernel-default.json
+│   │   └── profiles/
+│   │       ├── bpf.json
+│   │       ├── drivers.json
+│   │       ├── fs.json
+│   │       ├── io_uring.json
+│   │       └── net.json
 │   ├── syzbot.py
 │   └── targeting.py
 └── README.md

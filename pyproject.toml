@@ -18,3 +18,6 @@ kernel-harness = "kernel_harness.cli:main"
 
 [tool.setuptools]
 packages = ["kernel_harness"]
+
+[tool.setuptools.package-data]
+kernel_harness = ["resources/*.json", "resources/profiles/*.json"]

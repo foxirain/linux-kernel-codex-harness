@@ -24,14 +24,14 @@ from kernel_harness.syzbot import fetch_dashboard, load_index, summarize_index
 from kernel_harness.targeting import discover_candidates, load_config
 
 
-PACKAGE_ROOT = Path(__file__).resolve().parent.parent
+RESOURCE_ROOT = Path(__file__).resolve().parent / "resources"
 PROFILE_CONFIGS = {
-    "default": PACKAGE_ROOT / "configs" / "linux-kernel-default.json",
-    "bpf": PACKAGE_ROOT / "configs" / "profiles" / "bpf.json",
-    "drivers": PACKAGE_ROOT / "configs" / "profiles" / "drivers.json",
-    "fs": PACKAGE_ROOT / "configs" / "profiles" / "fs.json",
-    "io_uring": PACKAGE_ROOT / "configs" / "profiles" / "io_uring.json",
-    "net": PACKAGE_ROOT / "configs" / "profiles" / "net.json",
+    "default": RESOURCE_ROOT / "linux-kernel-default.json",
+    "bpf": RESOURCE_ROOT / "profiles" / "bpf.json",
+    "drivers": RESOURCE_ROOT / "profiles" / "drivers.json",
+    "fs": RESOURCE_ROOT / "profiles" / "fs.json",
+    "io_uring": RESOURCE_ROOT / "profiles" / "io_uring.json",
+    "net": RESOURCE_ROOT / "profiles" / "net.json",
 }
 VERDICTS = ["cve_candidate", "plausible_security_bug", "latent_bug", "not_cve_candidate", "needs_more_context"]
 SUBCOMMANDS = {"scan", "inspect", "codex", "next", "record", "ingest", "loop", "status", "autopilot", "syzbot-fetch", "syzbot-stats"}
@@ -94,7 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
     autopilot_parser.add_argument("--per-run-timeout", default="20m", help="Maximum time per Codex execution. Example: 10m.")
     autopilot_parser.add_argument("--include-snippet", action="store_true", help="Append generated code snippets to prompts.")
     autopilot_parser.add_argument("--model", default="", help="Optional Codex model override.")
-    autopilot_parser.add_argument("--sandbox", choices=["read-only", "workspace-write", "danger-full-access"], default="workspace-write", help="Sandbox mode for codex exec when not bypassing safeguards.")
+    autopilot_parser.add_argument("--sandbox", choices=["read-only", "workspace-write", "danger-full-access"], default="read-only", help="Sandbox mode for codex exec when not bypassing safeguards (default: read-only).")
     autopilot_parser.add_argument("--no-full-auto", action="store_true", help="Do not pass --full-auto to codex exec.")
     autopilot_parser.add_argument("--dangerously-bypass-approvals-and-sandbox", action="store_true", help="Pass through Codex's unsafe bypass flag.")
     autopilot_parser.add_argument("--stop-on-finding", action="store_true", help="Stop as soon as a strong candidate is found.")
@@ -117,7 +117,12 @@ def _add_scan_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--syzbot-json", type=Path, help="Optional syzbot JSON created by syzbot-fetch.")
     parser.add_argument("--out", type=Path, default=Path("artifacts"), help="Directory where session artifacts will be written.")
     parser.add_argument("--limit", type=int, default=80, help="Maximum number of candidates to score before truncation.")
-    parser.add_argument("--top", type=int, default=20, help="How many high-priority prompt bundles to generate.")
+    parser.add_argument(
+        "--top",
+        type=int,
+        default=20,
+        help="How many high-priority prompt bundles to pre-generate; later ranks remain available on demand.",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -187,6 +192,7 @@ def _run_scan(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     print(f"syzbot_json={args.syzbot_json or ''}")
     print(f"candidates={len(candidates)}")
     print(f"top_prompts={min(args.top, len(candidates))}")
+    print("top_prompts_scope=pre_generated_bundles_only")
     print(f"fixed_response_file={response_path(session_dir)}")
     return 0
 
@@ -271,7 +277,9 @@ def _run_loop(args: argparse.Namespace) -> int:
             print(f"ingested_verdict={state['history'][-1]['verdict']}")
             print(f"ingested_next_target={state['history'][-1].get('next_target', '')}")
         else:
-            print("response_file_present_but_no_pending_target=1")
+            archive_path = _archive_stale_response(session_dir, fixed_response)
+            print("stale_response_without_pending_target=1")
+            print(f"stale_response_archive={archive_path}")
     _print_next_prompt(session_dir, include_snippet=args.include_snippet)
     return 0
 
@@ -361,7 +369,7 @@ def _print_next_prompt(session_dir: Path, include_snippet: bool) -> None:
     manual_target = state.get("manual_next_target", "").strip()
     manual_prompt = state.get("manual_next_prompt", "").strip()
     depth = int(state.get("manual_followup_depth", 0))
-    if manual_target and depth >= MAX_MANUAL_FOLLOWUPS:
+    if manual_target and depth > MAX_MANUAL_FOLLOWUPS:
         state["manual_next_target"] = ""
         state["manual_next_prompt"] = ""
         state["manual_followup_depth"] = 0
@@ -401,6 +409,15 @@ def _ingest_text(session_dir: Path, text: str, rank: int | None, target: str, ne
         next_prompt=next_prompt,
         auto_advance=auto_advance,
     )
+
+
+def _archive_stale_response(session_dir: Path, fixed_response: Path) -> Path:
+    archive_dir = response_archive_dir(session_dir)
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    archive_path = archive_dir / f"stale-response-{stamp}.txt"
+    shutil.move(str(fixed_response), str(archive_path))
+    return archive_path
 
 
 def _print_codex_runbook(repo_root: str, prompt: str, prompt_path: Path, snippet_path: Path | None, include_snippet: bool, fixed_response_file: Path) -> None:

@@ -47,7 +47,7 @@ def write_session_bundle(repo_root: Path, out_dir: Path, candidates: list[Candid
         "",
         f"- Repository root: `{repo_root}`",
         f"- Candidate count: `{len(candidates)}`",
-        f"- Review budget: top `{top_n}` files",
+        f"- Pre-generated prompt bundles: top `{top_n}` files (later ranks remain available on demand)",
         "",
         "## Priority Targets",
         "",

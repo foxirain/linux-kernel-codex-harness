@@ -272,7 +272,17 @@ def _ingest_pending_response(session_dir: Path, findings_dir: Path, findings_pat
     fixed_response = response_path(session_dir)
     state = load_state(session_dir)
     pending_target = (state.get("pending_target") or "").strip()
-    if not pending_target or not fixed_response.exists() or fixed_response.stat().st_size == 0:
+    if not fixed_response.exists() or fixed_response.stat().st_size == 0:
+        return None
+    if not pending_target:
+        archive_path = _archive_response_file(session_dir, fixed_response)
+        _append_text(
+            progress_path,
+            (
+                "stale_response_without_pending_target=1\n"
+                f"response_archive={archive_path}\n"
+            ),
+        )
         return None
 
     text = fixed_response.read_text(encoding="utf-8")
@@ -466,7 +476,7 @@ def _render_next_prompt(session_dir: Path, *, include_snippet: bool) -> dict:
     manual_prompt = (state.get("manual_next_prompt") or "").strip()
     depth = int(state.get("manual_followup_depth", 0))
 
-    if manual_target and depth >= MAX_MANUAL_FOLLOWUPS:
+    if manual_target and depth > MAX_MANUAL_FOLLOWUPS:
         state["manual_next_target"] = ""
         state["manual_next_prompt"] = ""
         state["manual_followup_depth"] = 0

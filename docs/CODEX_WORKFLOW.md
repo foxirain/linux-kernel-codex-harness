@@ -5,7 +5,7 @@
 ## 1. 세션 생성
 
 ```bash
-python -m kernel_harness /path/to/linux --config /linux_harness/configs/linux-kernel-default.json --out /linux_harness/artifacts
+python -m kernel_harness scan /path/to/linux --profile default --out /linux_harness/artifacts
 ```
 
 ## 2. 가장 먼저 볼 파일

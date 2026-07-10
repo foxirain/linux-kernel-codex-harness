@@ -7,6 +7,7 @@ VERDICT_RULES = [
     ("latent bug but not currently reachable", "latent_bug"),
     ("not a cve candidate", "not_cve_candidate"),
     ("not_a_cve_candidate", "not_cve_candidate"),
+    ("not_cve_candidate", "not_cve_candidate"),
     ("not a cve", "not_cve_candidate"),
     ("plausible security bug", "plausible_security_bug"),
     ("plausible_security_bug", "plausible_security_bug"),
@@ -17,7 +18,6 @@ VERDICT_RULES = [
     ("cve급", "cve_candidate"),
     ("latent bug", "latent_bug"),
     ("latent_bug", "latent_bug"),
-    ("not_cve_candidate", "not_cve_candidate"),
 ]
 
 VERDICT_PATTERNS = [
@@ -118,6 +118,9 @@ def _map_verdict(value: str) -> str:
         return ""
     lowered = value.lower().strip()
     for needle, mapped in VERDICT_RULES:
-        if lowered == needle or needle in lowered:
+        if lowered == needle:
+            return mapped
+    for needle, mapped in VERDICT_RULES:
+        if needle in lowered:
             return mapped
     return ""
