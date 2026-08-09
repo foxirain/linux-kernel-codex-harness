@@ -319,3 +319,7 @@ Git history에 기록된 최초 버전부터 목표는 “LLM이 취약점을 �
 [2] Google, “syzkaller and syzbot,” GitHub repository. <https://github.com/google/syzkaller>
 
 [3] OpenAI, “Codex CLI.” <https://developers.openai.com/codex/cli/>
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
