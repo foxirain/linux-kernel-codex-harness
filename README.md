@@ -225,9 +225,17 @@ artifacts/session-<timestamp>/
 
 **TABLE II — DISCLOSED VULNERABILITY OUTCOME**
 
-| Public outcome | Affected area | Vulnerability | Investigation model |
-| --- | --- | --- | --- |
-| [CVE-2026-31720](https://nvd.nist.gov/vuln/detail/CVE-2026-31720) | USB gadget audio · `drivers/usb/gadget/function/f_uac1_legacy.c` | Host-controlled request length could overflow a four-byte stack object | Finding surfaced during a v1-assisted investigation; validation and disclosure remained human-led |
+| Public outcome | Affected area | Severity / CVSS | Vulnerability | Investigation model |
+| --- | --- | --- | --- | --- |
+| [CVE-2026-31720](https://nvd.nist.gov/vuln/detail/CVE-2026-31720) | USB gadget audio · `drivers/usb/gadget/function/f_uac1_legacy.c` | **High · 7.8 · CVSS 3.1** (NVD) | Host-controlled request length could overflow a four-byte stack object | Finding surfaced during a v1-assisted investigation; validation and disclosure remained human-led |
+
+<details>
+<summary><strong>CVSS 출처 (2026-08-09 확인)</strong></summary>
+
+- `CVE-2026-31720`: NVD CVSS 3.1 · 7.8 High · `CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H`
+- 공식 공개 점수와 vector를 옮겼으며 별도로 재산정하지 않았다.
+
+</details>
 
 검증은 탐지 정확도 benchmark가 아니라 구현의 회귀와 배포 가능성에 초점을 둔다.
 

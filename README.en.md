@@ -225,9 +225,17 @@ This version went beyond a proof of concept and was used in a real Linux kernel 
 
 **TABLE II — DISCLOSED VULNERABILITY OUTCOME**
 
-| Public outcome | Affected area | Vulnerability | Investigation model |
-| --- | --- | --- | --- |
-| [CVE-2026-31720](https://nvd.nist.gov/vuln/detail/CVE-2026-31720) | USB gadget audio · `drivers/usb/gadget/function/f_uac1_legacy.c` | Host-controlled request length could overflow a four-byte stack object | Finding surfaced during a v1-assisted investigation; validation and disclosure remained human-led |
+| Public outcome | Affected area | Severity / CVSS | Vulnerability | Investigation model |
+| --- | --- | --- | --- | --- |
+| [CVE-2026-31720](https://nvd.nist.gov/vuln/detail/CVE-2026-31720) | USB gadget audio · `drivers/usb/gadget/function/f_uac1_legacy.c` | **High · 7.8 · CVSS 3.1** (NVD) | Host-controlled request length could overflow a four-byte stack object | Finding surfaced during a v1-assisted investigation; validation and disclosure remained human-led |
+
+<details>
+<summary><strong>CVSS provenance (checked 2026-08-09)</strong></summary>
+
+- `CVE-2026-31720`: NVD CVSS 3.1 · 7.8 High · `CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H`
+- The officially published score and vector are reproduced without independent rescoring.
+
+</details>
 
 Verification focuses on implementation regressions and distributability, not a detection-accuracy benchmark.
 
