@@ -227,7 +227,7 @@ artifacts/session-<timestamp>/
 
 | Public outcome | Affected area | Severity / CVSS | Vulnerability | Investigation model |
 | --- | --- | --- | --- | --- |
-| [CVE-2026-31720](https://nvd.nist.gov/vuln/detail/CVE-2026-31720) | USB gadget audio · `drivers/usb/gadget/function/f_uac1_legacy.c` | **High · 7.8 · CVSS 3.1** (NVD) | Host-controlled request length could overflow a four-byte stack object | Finding surfaced during a v1-assisted investigation; validation and disclosure remained human-led |
+| [CVE-2026-31720](https://nvd.nist.gov/vuln/detail/CVE-2026-31720) | USB gadget audio · `drivers/usb/gadget/function/f_uac1_legacy.c` | ![High](https://img.shields.io/badge/High-C2410C?style=flat-square) **7.8 · CVSS 3.1** (NVD) | Host-controlled request length could overflow a four-byte stack object | Finding surfaced during a v1-assisted investigation; validation and disclosure remained human-led |
 
 <details>
 <summary><strong>CVSS 출처 (2026-08-09 확인)</strong></summary>
